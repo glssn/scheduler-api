@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/nerney/dappy"
 )
 
+// Login logs the user in and returns a JWT token.
 func Login(c *gin.Context) {
 	// get the user and pass from the request body
 	var body struct {
@@ -22,7 +22,7 @@ func Login(c *gin.Context) {
 
 	if c.Bind(&body) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "failed to read body",
+			"error": "Failed to read body",
 		})
 		return
 	}
@@ -36,14 +36,13 @@ func Login(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Unable to connect to LDAP backend",
 		})
 	}
 
 	if err := client.Auth(body.User, body.Password); err != nil {
-		fmt.Println(body.User, body.Password)
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "Invalid username and password",
 		})
 		return
@@ -58,6 +57,8 @@ func Login(c *gin.Context) {
 			"error": "Failed to create user",
 		})
 	}
+
+	apiUser := userToAPIUser(user)
 
 	// Generate the JWT token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -77,35 +78,26 @@ func Login(c *gin.Context) {
 	// Send the token back
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("Authorization", tokenStringSigned, 3600*24*90, "", "", false, true)
-	c.JSON(http.StatusOK, gin.H{"user": user})
+	c.JSON(http.StatusOK, apiUser)
 }
 
+// Validate validates the user and returns an APIUser struct.
+// If the user is not valid, it returns a 401 Unauthorized status code.
 func Validate(c *gin.Context) {
 	// get the user from the middleware
 	user, _ := c.Get("user")
 
-	if user == nil {
-		// Handle the case where the user is nil
+	if _, ok := user.(models.User); !ok {
+		// Handle the case where the user is not of type models.User
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
 	// Create the return struct
-	type userReturn struct {
-		ID       uint
-		Role     string
-		Username string
-	}
-	// Map the user to the return struct
-	u := &userReturn{
-		ID:       user.(models.User).ID,
-		Role:     user.(models.User).Role,
-		Username: user.(models.User).Username,
-	}
+	apiUser := userToAPIUser(user.(models.User))
+
 	// Return the user in the response
-	c.JSON(http.StatusOK, gin.H{
-		"user": u,
-	})
+	c.JSON(http.StatusOK, apiUser)
 }
 
 func Logout(c *gin.Context) {

@@ -18,7 +18,7 @@ func init() {
 	initializers.ConnectToDB()
 	initializers.MigrateDatabase()
 	initializers.PopulateBankHolidays()
-	initializers.SyncBankHolidays()
+	go initializers.SyncBankHolidays()
 }
 
 func main() {
@@ -41,5 +41,5 @@ func main() {
 
 	api.Routes(app)
 
-	log.Fatal(app.Run(":3000"))
+	log.Fatal(app.Run("localhost:3000"))
 }

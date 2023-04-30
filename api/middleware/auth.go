@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -36,6 +37,7 @@ func RequireAuth(c *gin.Context) {
 		allowedTokens := strings.Split(os.Getenv("ALLOWED_TOKENS"), ",")
 		if contains(allowedTokens, tokenString) {
 			// If the token is in the list of allowed tokens, continue with the request
+			log.Println("Request authenticated using basic auth token")
 			c.Next()
 			return
 		}
@@ -47,7 +49,7 @@ func RequireAuth(c *gin.Context) {
 	// Get the JWT from cookie
 	tokenStringSigned, err := c.Cookie("Authorization")
 	if err != nil || tokenStringSigned == "" {
-		fmt.Println("no Authorization cookie")
+		log.Println("Request not authenticated")
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -66,6 +68,7 @@ func RequireAuth(c *gin.Context) {
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		// Check JWT expiry
 		if float64(time.Now().Unix()) > claims["exp"].(float64) {
+			log.Println("JWT token expired")
 			c.AbortWithStatus(http.StatusUnauthorized)
 		}
 
@@ -74,6 +77,7 @@ func RequireAuth(c *gin.Context) {
 		initializers.DB.First(&user, claims["sub"])
 
 		if user.ID == 0 {
+			log.Println("JWT token invalid")
 			c.AbortWithStatus(http.StatusUnauthorized)
 		}
 

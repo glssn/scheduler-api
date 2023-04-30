@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +16,21 @@ type APIUser struct {
 	Role     string  `json:"role"`
 }
 
-func UserRoutes(incomingRoutes *gin.Engine) {
+// userToAPIUser converts a User struct to an APIUser struct.
+// The APIUser struct is a subset of the User struct, containing only the fields that are needed by the API.
+func userToAPIUser(user models.User) APIUser {
+	apiUser := APIUser{}
+	// Marshal the User struct into a JSON string
+	jsonUser, err := json.Marshal(user)
+	if err != nil {
+		log.Println(err)
+	}
+	// Parse the JSON string into the apiUser struct
+	err = json.Unmarshal(jsonUser, &apiUser)
+	if err != nil {
+		log.Println(err)
+	}
+	return apiUser
 }
 
 // GET /api/user/:id
@@ -36,4 +52,16 @@ func GetAllUsers(c *gin.Context) {
 
 	initializers.DB.Find(&users)
 	c.JSON(http.StatusOK, users)
+}
+
+// POST /api/user/:id
+// Update a user by ID
+func UpdateUserByID(c *gin.Context) {
+	var user models.User
+
+	if err := initializers.DB.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found."})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }

@@ -1,8 +1,9 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -12,34 +13,77 @@ import (
 )
 
 type NewEventInput struct {
-	Type              string    `binding:"required"`
-	StartDate         time.Time `binding:"required"`
-	EndDate           time.Time
-	AllDay            bool
-	RecurringType     string
-	RecurringInterval uint32
+	Type              string    `binding:"required" json:"type"`
+	Title             string    `json:"title"`
+	StartDate         time.Time `binding:"required" json:"start_date"`
+	EndDate           time.Time `json:"end_date"`
+	AllDay            bool      `json:"all_day"`
+	RecurringType     string    `json:"recurring_type"`
+	RecurringInterval uint32    `json:"recurring_interval"`
 }
 
-type UpdateEventInput struct {
-	Type              string
-	StartDate         time.Time
-	EndDate           time.Time
-	AllDay            bool
-	RecurringType     string
-	RecurringInterval uint32
+type PatchEventInput struct {
+	Type              string    `binding:"required" json:"type"`
+	Title             string    `json:"title"`
+	StartDate         time.Time `binding:"required" json:"start_date"`
+	EndDate           time.Time `json:"end_date"`
+	AllDay            bool      `json:"all_day"`
+	RecurringType     string    `json:"recurring_type"`
+	RecurringInterval uint32    `json:"recurring_interval"`
 }
 
 type APIEvent struct {
-	ID                float64   `json:"id"`
-	Type              string    `json:"type"`
+	ID                float64   `form:"id" json:"id"`
+	Type              string    `form:"type" json:"type"`
 	Title             string    `json:"title"`
 	StartDate         time.Time `json:"start_date"`
 	EndDate           time.Time `json:"end_date"`
 	AllDay            bool      `json:"all_day"`
 	RecurringType     string    `json:"recurring_type"`
 	RecurringInterval uint32    `json:"recurring_interval"`
-	User              APIUser   `json:"user"`
-	UserID            int       `json:"user_id"`
+	// User              APIUser   `json:"user"`
+	UserID int `json:"user_id"`
+}
+
+// eventToAPIEvent converts a Event struct to an APIEvent struct.
+// The APIEvent struct is a subset of the Event struct, containing only the fields that are needed by the API.
+func eventToAPIEvent(event models.Event) (APIEvent, error) {
+	if event.Type == "" {
+		log.Println("found a null Event")
+		return APIEvent{}, errors.New("event is null")
+	}
+	apiEvent := APIEvent{}
+	// Marshal the Event struct into a JSON string
+	jsonEvent, err := json.Marshal(event)
+	if err != nil {
+		log.Println(err)
+		return apiEvent, errors.New("Could not marshal event")
+	}
+	// Parse the JSON string into the apiEvent struct
+	err = json.Unmarshal(jsonEvent, &apiEvent)
+	if err != nil {
+		log.Println(err)
+		return apiEvent, errors.New("Could not unmarshal into APIEvent")
+	}
+	return apiEvent, nil
+}
+
+// eventsToAPIEvents converts a slice of Events struct to a slice of APIEvents
+// The APIEvent struct is a subset of the Event struct, containing only the fields that are needed by the API.
+func eventsToAPIEvents(events []models.Event) []APIEvent {
+	apiEvents := make([]APIEvent, 0)
+	for _, event := range events {
+		if event.Type == "" {
+			log.Println("found a null Event type")
+		}
+		apiEvent, err := eventToAPIEvent(event)
+		if err != nil {
+			log.Println("error converting event to APIEvent:", err)
+			continue
+		}
+		apiEvents = append(apiEvents, apiEvent)
+	}
+	return apiEvents
 }
 
 // ParseTime takes a string representing a date and time and attempts to parse it using a list of supported formats.
@@ -94,6 +138,15 @@ func FindEvents(c *gin.Context) {
 	c.JSON(http.StatusOK, events)
 }
 
+type EventQuery struct {
+	ID        float64   `form:"id"`
+	Type      string    `form:"type"`
+	Date      time.Time `form:"date"`
+	StartDate time.Time `form:"start_date"`
+	EndDate   time.Time `form:"end_date"`
+	UserID    int       `form:"user_id"`
+}
+
 // GET /events
 // Get events based on the specified parameters
 // If the query string is empty, fetch all events
@@ -101,132 +154,171 @@ func FindEvents(c *gin.Context) {
 // If the query string contains "start_date" and "end_date" parameters, fetch the events where the start_date and end_dates are within the specified range,
 // or where the start_date is between the specified startDate and endDate and the all_day field is true
 func GetEvent(c *gin.Context) {
+	// Get the query parameters
+	// params := c.Request.URL.Query()
 
-	params := c.Request.URL.Query()
+	var eventQuery EventQuery
+	if err := c.ShouldBind(&eventQuery); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters for eventQuery"})
+		return
+	}
+	log.Println("====== Only Bind By Query String ======")
+	log.Println("id: ", eventQuery.ID)
+	log.Println("type: ", eventQuery.Type)
+	log.Println("date: ", eventQuery.Date)
+	log.Println("time is zero?: ", eventQuery.Date.IsZero())
+	log.Println("start_date: ", eventQuery.StartDate)
+	log.Println("end_date: ", eventQuery.EndDate)
+	log.Println("user_id: ", eventQuery.UserID)
 
-	// no parameters
-	if len(params) == 0 {
-		// query string is empty, so fetch all results
-		var events []APIEvent
-		if err := initializers.DB.Model(&models.Event{}).Find(&events).Error; err != nil {
-			c.AbortWithStatus(404)
-			fmt.Println(err)
-		} else {
-			c.JSON(http.StatusOK, events)
+	// If event ID is provided, retrieve it
+	if eventQuery.ID != float64(0) {
+		GetEventById(&eventQuery.ID, c)
+		return
+	}
+	// If type is provided, but no User ID
+	if eventQuery.Type != "" && eventQuery.UserID == 0 {
+		// if no date or date range is provided
+		if eventQuery.Date.IsZero() && eventQuery.StartDate.IsZero() && eventQuery.StartDate.IsZero() {
+			GetEventByType(&eventQuery.Type, c)
+			return
+		}
+		// if date is provided
+		if !eventQuery.Date.IsZero() {
+			GetEventByTypeAndDate(&eventQuery.Type, &eventQuery.Date, c)
+			return
+		}
+		// if date range is provided
+		if !eventQuery.StartDate.IsZero() && !eventQuery.StartDate.IsZero() {
+			GetEventByTypeAndDateRange(&eventQuery.Type, &eventQuery.StartDate, &eventQuery.EndDate, c)
 			return
 		}
 	}
-
-	// id
-	if len(params) == 1 && params.Get("id") != "" {
-		// id parameter is present, so fetch the event with the specified id
-		id := params.Get("id")
-		var event APIEvent
-		if err := initializers.DB.Model(&models.Event{}).Where("id = ?", id).First(&event).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+	// If User ID is provided
+	if eventQuery.UserID != 0 {
+		// if no type or date or date range is provided
+		if eventQuery.Type == "" && eventQuery.Date.IsZero() && eventQuery.StartDate.IsZero() && eventQuery.StartDate.IsZero() {
+			GetEventByUserID(&eventQuery.UserID, c)
 			return
-		} else {
-			c.JSON(http.StatusOK, event)
+		}
+		// if type is provided, but date and date range is not provided
+		if eventQuery.Type != "" && eventQuery.Date.IsZero() && eventQuery.StartDate.IsZero() && eventQuery.StartDate.IsZero() {
+			GetEventByUserIdAndType(&eventQuery.UserID, &eventQuery.Type, c)
+			return
+		}
+		// if type and date is provided but not date range
+		if eventQuery.Type != "" && !eventQuery.Date.IsZero() && eventQuery.StartDate.IsZero() && eventQuery.StartDate.IsZero() {
+			GetEventByUserIdAndTypeAndDate(&eventQuery.UserID, &eventQuery.Type, &eventQuery.Date, c)
+			return
+		}
+		// if type and date range is provided
+		if eventQuery.Type != "" && !eventQuery.StartDate.IsZero() && !eventQuery.StartDate.IsZero() {
+			GetEventByUserIdAndTypeAndDateRange(&eventQuery.UserID, &eventQuery.Type, &eventQuery.StartDate, &eventQuery.EndDate, c)
 			return
 		}
 	}
+	// If date is provided
+	if !eventQuery.Date.IsZero() {
+		GetEventByDate(&eventQuery.Date, c)
+		return
+	}
+	// If date range is provided
+	if !eventQuery.StartDate.IsZero() && !eventQuery.StartDate.IsZero() {
+		GetEventByDateRange(&eventQuery.StartDate, &eventQuery.EndDate, c)
+		return
+	}
+	FindEvents(c)
+	c.JSON(http.StatusBadRequest, gin.H{"error": "Bad Request."})
+}
 
-	// type
-	if len(params) == 1 && params.Get("type") != "" {
-		// type parameter is present, so fetch all events with the specified type
-		var events []APIEvent
-		t := params.Get("type")
-		if err := initializers.DB.Model(&models.Event{}).Where("type = ?", t).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "No events found for event type" + t})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
+// GetEventById returns the event from the database where the ID is
+func GetEventById(id *float64, c *gin.Context) {
+	var event models.Event
+	if err := initializers.DB.Where("id = ?", *id).First(&event).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvent APIEvent
+	apiEvent, err := eventToAPIEvent(event)
+	if err != nil {
+		log.Println("error converting event to APIEvent:", err)
 	}
 
-	// user_id
-	if len(params) == 1 && params.Get("user_id") != "" {
-		// user_id parameter is present, so fetch all events with the specified user_id
-		var events []APIEvent
-		userID := params.Get("user_id")
-		if err := initializers.DB.Model(&models.Event{}).Where("user_id = ?", userID).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "No events found for user" + userID})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	// start_date and end_date
-	if len(params) == 2 && params.Get("start_date") != "" && params.Get("end_date") != "" {
-		// Fetch the events where the start_date and end_dates are within the specified range,
-		// or where the start_date is between the specified startDate and endDate and the end_date is NULL or the all_day field is true
-		var events []APIEvent
-		startDate := params.Get("start_date")
-		endDate := params.Get("end_date")
-		if err := initializers.DB.Model(&models.Event{}).Where("(start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true)", startDate, endDate, startDate, endDate).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	// start_date and end_date and user_id
-	if len(params) == 3 && params.Get("start_date") != "" && params.Get("end_date") != "" && params.Get("user_id") != "" {
-		// handle request with the "start_date" and "end_date" and "user_id" parameters
-		var events []APIEvent
-		startDate := params.Get("start_date")
-		endDate := params.Get("end_date")
-		userID := params.Get("user_id")
-		if err := initializers.DB.Model(&models.Event{}).Where("user_id = ? AND ((start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true))", userID, startDate, endDate, startDate, endDate).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Events not found"})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	// start_date and end_date and type
-	if len(params) == 3 && params.Get("start_date") != "" && params.Get("end_date") != "" && params.Get("type") != "" {
-		// handle request with the "start_date" and "end_date" and "type" parameters
-		var events []APIEvent
-		startDate := params.Get("start_date")
-		endDate := params.Get("end_date")
-		t := params.Get("type")
-		if err := initializers.DB.Model(&models.Event{}).Where("type = ? AND ((start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true))", t, startDate, endDate, startDate, endDate).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Events not found"})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	// start_date and end_date and type and user_id
-	if len(params) == 4 && params.Get("start_date") != "" && params.Get("end_date") != "" && params.Get("type") != "" && params.Get("user_id") != "" {
-		// handle request with the "start_date" and "end_date" and "type" and "user_id" parameters
-		var events []APIEvent
-		startDate := params.Get("start_date")
-		endDate := params.Get("end_date")
-		t := params.Get("type")
-		userID := params.Get("user_id")
-		if err := initializers.DB.Model(&models.Event{}).Where("type = ? AND user_id = ? AND ((start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true))", t, userID, startDate, endDate, startDate, endDate).Find(&events).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Events not found"})
-			return
-		} else {
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	c.JSON(http.StatusBadRequest, nil)
+	// Return the event
+	c.JSON(http.StatusOK, apiEvent)
 	return
+}
 
+func GetEventByType(t *string, c *gin.Context) {
+	var events []models.Event
+	if err := initializers.DB.Where("type = ?", &t).Find(&events).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvents []APIEvent
+	apiEvents = eventsToAPIEvents(events)
+
+	// Return the event
+	c.JSON(http.StatusOK, apiEvents)
+}
+
+func GetEventByTypeAndDate(t *string, date *time.Time, c *gin.Context) {
+	var events []models.Event
+	if err := initializers.DB.Where("type = ? & start_date = ?", &t, &date).Find(&events).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvents []APIEvent
+	apiEvents = eventsToAPIEvents(events)
+
+	// Return the event
+	c.JSON(http.StatusOK, apiEvents)
+}
+
+func GetEventByTypeAndDateRange(t *string, startDate *time.Time, endDate *time.Time, c *gin.Context) {
+	var events []models.Event
+	if err := initializers.DB.Where("(type = ? AND start_date >= ? AND end_date <= ?) OR (type = ? AND start_date BETWEEN ? AND ? AND all_day = true)", &t, &startDate, &endDate, &t, &startDate, &endDate).Find(&events).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvents []APIEvent
+	apiEvents = eventsToAPIEvents(events)
+
+	// Return the event
+	c.JSON(http.StatusOK, apiEvents)
+}
+
+func GetEventByDate(date *time.Time, c *gin.Context) {
+	var events []models.Event
+	if err := initializers.DB.Where("start_date = ?", &date).Find(&events).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvents []APIEvent
+	apiEvents = eventsToAPIEvents(events)
+
+	// Return the event
+	c.JSON(http.StatusOK, apiEvents)
+}
+
+func GetEventByDateRange(startDate *time.Time, endDate *time.Time, c *gin.Context) {
+	var events []models.Event
+	if err := initializers.DB.Where("(start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true)", &startDate, &endDate, &startDate, &endDate).Find(&events).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
+		return
+	}
+	// convert the event to apiEvent
+	var apiEvents []APIEvent
+	apiEvents = eventsToAPIEvents(events)
+
+	// Return the event
+	c.JSON(http.StatusOK, apiEvents)
 }
 
 // POST /events
@@ -239,13 +331,13 @@ func CreateEvent(c *gin.Context) {
 	// Validate input
 	var input NewEventInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
 		return
 	}
 	// Get user ID from middleware
 	userFromCookie, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 	user := userFromCookie.(models.User)
@@ -261,8 +353,11 @@ func CreateEvent(c *gin.Context) {
 		User:              user,
 	}
 	initializers.DB.Save(&event)
-	c.JSON(http.StatusOK, gin.H{"data": event})
-
+	apiEvent, err := eventToAPIEvent(event)
+	if err != nil {
+		log.Println("error converting event to APIEvent:", err)
+	}
+	c.JSON(http.StatusCreated, apiEvent)
 }
 
 // PATCH /events/:id
@@ -283,27 +378,29 @@ func UpdateEvent(c *gin.Context) {
 	}
 
 	// Check if event exists
-	var event []models.Event
+	var event models.Event
 	if err := initializers.DB.Where("id = ?", id).First(&event).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found."})
 		return
 	}
 	// Validate input
-	var input UpdateEventInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var apiEvent APIEvent
+	if err := c.ShouldBindJSON(&apiEvent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newevent := models.Event{
-		Type:              input.Type,
-		StartDate:         input.StartDate,
-		EndDate:           input.EndDate,
-		AllDay:            input.AllDay,
-		RecurringType:     input.RecurringType,
-		RecurringInterval: input.RecurringInterval,
+
+	// Update the event in the database
+	if err := initializers.DB.Model(&event).Where("id = ?", id).Updates(&apiEvent).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	initializers.DB.Model(&event).Where("id = ?", id).Updates(newevent)
-	c.JSON(http.StatusOK, gin.H{"data": newevent})
+	apiEvent, err := eventToAPIEvent(event)
+	if err != nil {
+		log.Println("error converting event to APIEvent:", err)
+	}
+
+	c.JSON(http.StatusOK, &apiEvent)
 }
 
 // DELETE /events/:id
