@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glssn/scheduler-api/api/models"
-	"github.com/glssn/scheduler-api/initializers"
 )
 
 type NewEventInput struct {
@@ -134,7 +133,7 @@ func ParseRecurringInterval(interval string) (uint32, error) {
 // Get all events
 func FindEvents(c *gin.Context) {
 	var events []APIEvent
-	initializers.DB.Model(&models.Event{}).Find(&events)
+	db.Model(&models.Event{}).Find(&events)
 	c.JSON(http.StatusOK, events)
 }
 
@@ -235,7 +234,7 @@ func GetEvent(c *gin.Context) {
 // GetEventById returns the event from the database where the ID is
 func GetEventById(id *float64, c *gin.Context) {
 	var event models.Event
-	if err := initializers.DB.Where("id = ?", *id).First(&event).Error; err != nil {
+	if err := db.Where("id = ?", *id).First(&event).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found."})
 		return
 	}
@@ -253,7 +252,7 @@ func GetEventById(id *float64, c *gin.Context) {
 
 func GetEventByType(t *string, c *gin.Context) {
 	var events []models.Event
-	if err := initializers.DB.Where("type = ?", &t).Find(&events).Error; err != nil {
+	if err := db.Where("type = ?", &t).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -267,7 +266,7 @@ func GetEventByType(t *string, c *gin.Context) {
 
 func GetEventByTypeAndDate(t *string, date *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := initializers.DB.Where("type = ? & start_date = ?", &t, &date).Find(&events).Error; err != nil {
+	if err := db.Where("type = ? & start_date = ?", &t, &date).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -281,7 +280,7 @@ func GetEventByTypeAndDate(t *string, date *time.Time, c *gin.Context) {
 
 func GetEventByTypeAndDateRange(t *string, startDate *time.Time, endDate *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := initializers.DB.Where("(type = ? AND start_date >= ? AND end_date <= ?) OR (type = ? AND start_date BETWEEN ? AND ? AND all_day = true)", &t, &startDate, &endDate, &t, &startDate, &endDate).Find(&events).Error; err != nil {
+	if err := db.Where("(type = ? AND start_date >= ? AND end_date <= ?) OR (type = ? AND start_date BETWEEN ? AND ? AND all_day = true)", &t, &startDate, &endDate, &t, &startDate, &endDate).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -295,7 +294,7 @@ func GetEventByTypeAndDateRange(t *string, startDate *time.Time, endDate *time.T
 
 func GetEventByDate(date *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := initializers.DB.Where("start_date = ?", &date).Find(&events).Error; err != nil {
+	if err := db.Where("start_date = ?", &date).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -309,7 +308,7 @@ func GetEventByDate(date *time.Time, c *gin.Context) {
 
 func GetEventByDateRange(startDate *time.Time, endDate *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := initializers.DB.Where("(start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true)", &startDate, &endDate, &startDate, &endDate).Find(&events).Error; err != nil {
+	if err := db.Where("(start_date >= ? AND end_date <= ?) OR (start_date BETWEEN ? AND ? AND all_day = true)", &startDate, &endDate, &startDate, &endDate).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -352,7 +351,7 @@ func CreateEvent(c *gin.Context) {
 		RecurringInterval: input.RecurringInterval,
 		User:              user,
 	}
-	initializers.DB.Save(&event)
+	db.Save(&event)
 	apiEvent, err := eventToAPIEvent(event)
 	if err != nil {
 		log.Println("error converting event to APIEvent:", err)
@@ -379,7 +378,7 @@ func UpdateEvent(c *gin.Context) {
 
 	// Check if event exists
 	var event models.Event
-	if err := initializers.DB.Where("id = ?", id).First(&event).Error; err != nil {
+	if err := db.Where("id = ?", id).First(&event).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found."})
 		return
 	}
@@ -391,7 +390,7 @@ func UpdateEvent(c *gin.Context) {
 	}
 
 	// Update the event in the database
-	if err := initializers.DB.Model(&event).Where("id = ?", id).Updates(&apiEvent).Error; err != nil {
+	if err := db.Model(&event).Where("id = ?", id).Updates(&apiEvent).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -417,12 +416,12 @@ func DeleteEvent(c *gin.Context) {
 
 	// Get model if exist
 	var event models.Event
-	if err := initializers.DB.Where("id = ?", id).First(&event).Error; err != nil {
+	if err := db.Where("id = ?", id).First(&event).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Event not found."})
 		return
 	}
 
-	initializers.DB.Delete(&event)
+	db.Delete(&event)
 
 	c.JSON(http.StatusOK, gin.H{"data": true})
 }

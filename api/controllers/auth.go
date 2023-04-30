@@ -12,6 +12,8 @@ import (
 	"github.com/nerney/dappy"
 )
 
+var db = initializers.DB
+
 // Login logs the user in and returns a JWT token.
 func Login(c *gin.Context) {
 	// get the user and pass from the request body
@@ -50,7 +52,7 @@ func Login(c *gin.Context) {
 
 	// Create the user in the database
 	user := models.User{Username: body.User, Role: "Viewer"}
-	result := initializers.DB.FirstOrCreate(&user, models.User{Username: body.User})
+	result := db.FirstOrCreate(&user, models.User{Username: body.User})
 
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

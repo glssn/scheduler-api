@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glssn/scheduler-api/api/models"
-	"github.com/glssn/scheduler-api/initializers"
 )
 
 type APIUser struct {
@@ -38,7 +37,7 @@ func userToAPIUser(user models.User) APIUser {
 func GetUserByID(c *gin.Context) {
 	var user models.User
 
-	if err := initializers.DB.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
+	if err := db.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found."})
 		return
 	}
@@ -50,7 +49,7 @@ func GetUserByID(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	var users []models.User
 
-	initializers.DB.Find(&users)
+	db.Find(&users)
 	c.JSON(http.StatusOK, users)
 }
 
@@ -59,7 +58,7 @@ func GetAllUsers(c *gin.Context) {
 func UpdateUserByID(c *gin.Context) {
 	var user models.User
 
-	if err := initializers.DB.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
+	if err := db.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found."})
 		return
 	}
