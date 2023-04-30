@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glssn/scheduler-api/api/models"
+	"github.com/glssn/scheduler-api/initializers"
 )
 
 // GET /api/events/user
@@ -16,7 +17,7 @@ import (
 // Otherwise, the function returns a 200 OK response with the found events.
 func GetEventByUserID(id *int, c *gin.Context) {
 	var events []models.Event
-	if err := db.Where("user_id = ?", &id).Find(&events).Error; err != nil {
+	if err := initializers.DB.Where("user_id = ?", &id).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -30,7 +31,7 @@ func GetEventByUserID(id *int, c *gin.Context) {
 
 func GetEventByUserIdAndType(id *int, t *string, c *gin.Context) {
 	var events []models.Event
-	if err := db.Where("user_id = ? AND type = ?", &id, &t).Find(&events).Error; err != nil {
+	if err := initializers.DB.Where("user_id = ? AND type = ?", &id, &t).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -44,7 +45,7 @@ func GetEventByUserIdAndType(id *int, t *string, c *gin.Context) {
 
 func GetEventByUserIdAndTypeAndDate(id *int, t *string, date *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := db.Where("user_id = ? AND type = ? AND start_date = ?", &id, &t, &date).Find(&events).Error; err != nil {
+	if err := initializers.DB.Where("user_id = ? AND type = ? AND start_date = ?", &id, &t, &date).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}
@@ -57,7 +58,7 @@ func GetEventByUserIdAndTypeAndDate(id *int, t *string, date *time.Time, c *gin.
 }
 func GetEventByUserIdAndTypeAndDateRange(id *int, t *string, startDate *time.Time, endDate *time.Time, c *gin.Context) {
 	var events []models.Event
-	if err := db.Where("user_id = ? AND type = ? AND start_date BETWEEN ? AND ?", &id, &t, &startDate, &endDate).Find(&events).Error; err != nil {
+	if err := initializers.DB.Where("user_id = ? AND type = ? AND start_date BETWEEN ? AND ?", &id, &t, &startDate, &endDate).Find(&events).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No events found."})
 		return
 	}

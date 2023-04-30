@@ -14,8 +14,6 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
-var db = initializers.DB
-
 // contains checks if a string slice contains a given string
 func contains(slice []string, str string) bool {
 	for _, s := range slice {
@@ -76,7 +74,7 @@ func RequireAuth(c *gin.Context) {
 
 		// Find JWT subject in the database
 		var user models.User
-		db.First(&user, claims["sub"])
+		initializers.DB.First(&user, claims["sub"])
 
 		if user.ID == 0 {
 			log.Println("JWT token invalid")
