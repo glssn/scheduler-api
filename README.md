@@ -1,5 +1,10 @@
 # Scheduler API
 
+## Technologies
+
+* Gin
+* Gorm
+
 ```
 scheduler-api
 ├── api
