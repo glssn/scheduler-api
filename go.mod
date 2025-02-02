@@ -1,6 +1,6 @@
 module github.com/glssn/scheduler-api
 
-go 1.20
+go 1.23
 
 require (
 	github.com/gin-contrib/cors v1.4.0
@@ -41,7 +41,6 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/ldap.v3 v3.1.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
